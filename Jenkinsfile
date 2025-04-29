@@ -9,7 +9,7 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        git 'https://github.com/musthafa110/project-3.git'
+        git branch: 'main', url: 'https://github.com/musthafa110/project-3.git'
       }
     }
 
@@ -41,4 +41,3 @@ pipeline {
     }
   }
 }
-
