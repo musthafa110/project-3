@@ -11,10 +11,13 @@ spec:
     metadata:
       labels:
         app: nasa-app
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '3000'
     spec:
       containers:
         - name: nasa-app
           image: musthafa110/nasa-app:latest
           ports:
             - containerPort: 3000
-
