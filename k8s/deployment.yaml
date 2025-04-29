@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nasa-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nasa-app
+  template:
+    metadata:
+      labels:
+        app: nasa-app
+    spec:
+      containers:
+        - name: nasa-app
+          image: musthafa110/nasa-app:latest
+          ports:
+            - containerPort: 3000
+

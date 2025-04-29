@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NASA App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #000;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      color: #FFD700;
+    }
+    .apod-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 10px;
+    }
+    .description {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <h1>NASA - Astronomy Picture of the Day</h1>
+  <div id="apod-container">
+    <p>Loading NASA's Picture of the Day...</p>
+  </div>
+  <p class="description">Explore the universe one picture at a time.</p>
+  
+  <script>
+    async function fetchApod() {
+      const response = await fetch('/api/apod');
+      const data = await response.json();
+      const apodContainer = document.getElementById('apod-container');
+
+      // Create image element and description text
+      const imageElement = document.createElement('img');
+      imageElement.src = data.url;
+      imageElement.alt = data.title;
+      imageElement.className = 'apod-image';
+
+      const titleElement = document.createElement('h2');
+      titleElement.textContent = data.title;
+
+      const explanationElement = document.createElement('p');
+      explanationElement.textContent = data.explanation;
+
+      // Append elements to the container
+      apodContainer.innerHTML = '';
+      apodContainer.appendChild(titleElement);
+      apodContainer.appendChild(imageElement);
+      apodContainer.appendChild(explanationElement);
+    }
+
+    fetchApod();
+  </script>
+</body>
+</html>
+
