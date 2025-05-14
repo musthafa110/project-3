@@ -6,3 +6,7 @@ scrape_configs:
     static_configs:
       - targets: ['node-exporter:9100']
 
+  - job_name: 'nasa-app'
+    static_configs:
+      - targets: ['nasa-app-service:3000']  # Update this line to use the service name and port
+
