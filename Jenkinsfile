@@ -4,11 +4,11 @@ pipeline {
   environment {
     DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
     IMAGE_NAME = 'musthafa110/nasa-app'
-    KUBECONFIG = '/var/lib/jenkins/.kube/config' // ✅ Fix added here
+    KUBECONFIG = '/var/lib/jenkins/.kube/config'
   }
 
   stages {
-    stage('Checkout') {
+    stage('Checkout Code') {
       steps {
         git branch: 'main', url: 'https://github.com/musthafa110/project-3.git'
       }
@@ -22,7 +22,7 @@ pipeline {
       }
     }
 
-    stage('Push to DockerHub') {
+    stage('Push Image to DockerHub') {
       steps {
         withCredentials([
           usernamePassword(
@@ -44,8 +44,16 @@ pipeline {
       steps {
         sh 'kubectl apply -f k8s/deployment.yaml'
         sh 'kubectl apply -f k8s/service.yaml'
+        sh 'kubectl apply -f k8s/prometheus-deployment.yaml'
         sh 'kubectl rollout status deployment/nasa-app'
+        sh 'kubectl rollout status deployment/prometheus'
       }
+    }
+  }
+
+  post {
+    failure {
+      echo "Pipeline failed. Please check logs and pod status."
     }
   }
 }
