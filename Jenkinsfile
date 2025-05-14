@@ -5,7 +5,8 @@ pipeline {
         DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
         IMAGE_NAME = 'musthafa110/nasa-app'
         KUBECONFIG = '/var/lib/jenkins/.kube/config' // Adjust to your specific Kubeconfig path
-        NAMESPACE = 'default' // Add the appropriate namespace if needed
+        NAMESPACE = 'default' // Namespace for your app deployment
+        MONITORING_NAMESPACE = 'monitoring' // Namespace for Prometheus and Grafana
     }
 
     stages {
@@ -47,16 +48,16 @@ pipeline {
         stage('Install Prometheus and Grafana via Helm') {
             steps {
                 script {
-                    // Ensure Helm is installed, this might be part of your Jenkins agent setup
+                    // Add the Prometheus and Grafana Helm repositories
                     sh 'helm repo add prometheus-community https://prometheus-community.github.io/helm-charts'
                     sh 'helm repo add grafana https://grafana.github.io/helm-charts'
                     sh 'helm repo update'
 
                     // Install Prometheus using Helm (in monitoring namespace)
-                    sh 'helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace'
+                    sh 'helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace ${MONITORING_NAMESPACE} --create-namespace'
 
                     // Install Grafana using Helm (in monitoring namespace)
-                    sh 'helm upgrade --install grafana grafana/grafana --namespace monitoring --set adminPassword="admin"'
+                    sh 'helm upgrade --install grafana grafana/grafana --namespace ${MONITORING_NAMESPACE} --set adminPassword="admin"'
                 }
             }
         }
@@ -65,13 +66,15 @@ pipeline {
             steps {
                 script {
                     // Apply Kubernetes deployment and service files
-                    sh "kubectl apply -f k8s/deployment.yaml"
-                    sh "kubectl apply -f k8s/service.yaml"
-                    sh "kubectl apply -f k8s/prometheus-deployment.yaml"
+                    sh "kubectl apply -f k8s/deployment.yaml --namespace ${NAMESPACE}"
+                    sh "kubectl apply -f k8s/service.yaml --namespace ${NAMESPACE}"
+                    sh "kubectl apply -f k8s/prometheus-deployment.yaml --namespace ${MONITORING_NAMESPACE}"
 
-                    // Wait for the application and Prometheus deployments to complete
+                    // Wait for the application deployment to complete
                     sh 'kubectl rollout status deployment/nasa-app --namespace ${NAMESPACE}'
-                    sh 'kubectl rollout status deployment/prometheus --namespace monitoring'
+
+                    // Wait for the correct Prometheus deployment to complete
+                    sh 'kubectl rollout status deployment/prometheus-kube-prometheus-prometheus --namespace ${MONITORING_NAMESPACE}'
                 }
             }
         }
@@ -79,9 +82,9 @@ pipeline {
         stage('Verify Deployments') {
             steps {
                 script {
-                    // Check pod status and logs to verify deployment
+                    // Verify deployment status of your app and Prometheus in their respective namespaces
                     sh 'kubectl get pods --namespace ${NAMESPACE}'
-                    sh 'kubectl get pods --namespace monitoring'
+                    sh 'kubectl get pods --namespace ${MONITORING_NAMESPACE}'
                 }
             }
         }
@@ -90,8 +93,8 @@ pipeline {
             steps {
                 script {
                     // Expose Prometheus and Grafana via port forwarding (if needed)
-                    sh 'kubectl port-forward svc/prometheus 9090:9090 --namespace monitoring &'
-                    sh 'kubectl port-forward svc/grafana 3000:80 --namespace monitoring &'
+                    sh 'kubectl port-forward svc/prometheus 9090:9090 --namespace ${MONITORING_NAMESPACE} &'
+                    sh 'kubectl port-forward svc/grafana 3000:80 --namespace ${MONITORING_NAMESPACE} &'
                 }
             }
         }
