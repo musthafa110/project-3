@@ -43,11 +43,8 @@ pipeline {
             steps {
                 script {
                     sh 'helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true'
-                    sh 'helm repo add grafana https://grafana.github.io/helm-charts || true'
                     sh 'helm repo update'
-
-                    sh 'helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace'
-                    sh 'helm upgrade --install grafana grafana/grafana --namespace monitoring --set adminPassword="admin"'
+                    sh 'helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --wait'
                 }
             }
         }
@@ -57,8 +54,7 @@ pipeline {
                 script {
                     sh "kubectl apply -f k8s/deployment.yaml --namespace ${NAMESPACE}"
                     sh "kubectl apply -f k8s/service.yaml --namespace ${NAMESPACE}"
-                    // Removed prometheus-deployment.yaml
-                    sh 'kubectl rollout status deployment/nasa-app --namespace ${NAMESPACE}'
+                    sh "kubectl rollout status deployment/nasa-app --namespace ${NAMESPACE}"
                 }
             }
         }
@@ -68,14 +64,6 @@ pipeline {
                 script {
                     sh "kubectl get pods --namespace ${NAMESPACE}"
                     sh "kubectl get pods --namespace monitoring"
-                }
-            }
-        }
-
-        stage('Expose Services') {
-            steps {
-                script {
-                    sh 'kubectl port-forward svc/grafana 3000:80 --namespace monitoring &'
                 }
             }
         }
