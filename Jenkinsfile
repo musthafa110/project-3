@@ -55,6 +55,9 @@ pipeline {
                     // Verify pods in both default and monitoring namespaces
                     sh "kubectl get pods --namespace ${NAMESPACE}"
                     sh "kubectl get pods --namespace monitoring"
+                    
+                    // Port forward to access Grafana (runs in the background)
+                    sh "kubectl port-forward svc/grafana 3000:80 --namespace monitoring &"
                 }
             }
         }
