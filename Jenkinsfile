@@ -9,59 +9,50 @@ pipeline {
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Checkout & Build Image') {
             steps {
                 git branch: 'main', url: 'https://github.com/musthafa110/project-3.git'
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
                 script {
                     docker.build("${IMAGE_NAME}:latest", './nasa-app')
                 }
             }
         }
 
-        stage('Push Image to DockerHub') {
+        stage('Push Image & Install Monitoring') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "${DOCKER_CREDENTIALS_ID}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
+                script {
+                    // Push image to DockerHub
+                    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         docker.withRegistry('', "${DOCKER_CREDENTIALS_ID}") {
                             docker.image("${IMAGE_NAME}:latest").push()
                         }
                     }
+
+                    // Install Prometheus & Grafana via Helm
+                    sh '''
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                        helm repo update
+                        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --wait
+                    '''
                 }
             }
         }
 
-        stage('Install Prometheus and Grafana via Helm') {
+        stage('Deploy & Rollout') {
             steps {
                 script {
-                    sh 'helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true'
-                    sh 'helm repo update'
-                    sh 'helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --wait'
-                }
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                script {
-                    sh "kubectl apply -f k8s/deployment.yaml --namespace ${NAMESPACE}"
-                    sh "kubectl apply -f k8s/service.yaml --namespace ${NAMESPACE}"
+                    // Apply deployment and service
+                    sh "kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml --namespace ${NAMESPACE}"
+                    // Wait for deployment to be ready
                     sh "kubectl rollout status deployment/nasa-app --namespace ${NAMESPACE}"
                 }
             }
         }
 
-        stage('Verify Deployments') {
+        stage('Verify & Monitor') {
             steps {
                 script {
+                    // Verify pods in both default and monitoring namespaces
                     sh "kubectl get pods --namespace ${NAMESPACE}"
                     sh "kubectl get pods --namespace monitoring"
                 }
@@ -70,14 +61,8 @@ pipeline {
     }
 
     post {
-        always {
-            echo 'Pipeline finished.'
-        }
-        success {
-            echo 'Pipeline successfully executed.'
-        }
-        failure {
-            echo "Pipeline failed. Please check logs and pod status."
-        }
+        always { echo 'Pipeline finished.' }
+        success { echo 'Deployment successful.' }
+        failure { echo 'Pipeline failed. Check logs and pod status.' }
     }
 }
