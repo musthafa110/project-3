@@ -6,6 +6,7 @@ pipeline {
         IMAGE_NAME = 'musthafa110/nasa-app'
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         NAMESPACE = 'default'
+        MONITORING_NAMESPACE = 'monitoring'
     }
 
     stages {
@@ -18,62 +19,90 @@ pipeline {
             }
         }
 
-        stage('Push Image & Install Monitoring') {
+        stage('Push Docker Image') {
             steps {
                 script {
-                    // Push image to DockerHub
                     withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         docker.withRegistry('', "${DOCKER_CREDENTIALS_ID}") {
                             docker.image("${IMAGE_NAME}:latest").push()
                         }
                     }
+                }
+            }
+        }
 
-                    // Install Prometheus & Grafana via Helm
+        stage('Install Monitoring Tools') {
+            steps {
+                script {
                     sh '''
                         helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
                         helm repo update
-                        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --wait
+                        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                            --namespace ${MONITORING_NAMESPACE} --create-namespace --wait
                     '''
                 }
             }
         }
 
-        stage('Deploy & Rollout Canary') {
+        stage('Canary Deployment') {
             steps {
                 script {
-                    // Apply both v1 and v2 canary deployments + service
                     sh '''
-                        kubectl apply -f k8s/deployment-v1.yaml --namespace ${NAMESPACE}
-                        kubectl apply -f k8s/deployment-v2.yaml --namespace ${NAMESPACE}
-                        kubectl apply -f k8s/service.yaml --namespace ${NAMESPACE}
-                    '''
+                        kubectl apply -f k8s/deployment-v1.yaml -n ${NAMESPACE}
+                        kubectl apply -f k8s/deployment-v2.yaml -n ${NAMESPACE}
+                        kubectl apply -f k8s/service.yaml -n ${NAMESPACE}
 
-                    // Wait for both deployments to become ready
-                    sh '''
-                        kubectl rollout status deployment/nasa-app-v1 --namespace ${NAMESPACE}
-                        kubectl rollout status deployment/nasa-app-v2 --namespace ${NAMESPACE}
+                        kubectl rollout status deployment/nasa-app-v1 -n ${NAMESPACE}
+                        kubectl rollout status deployment/nasa-app-v2 -n ${NAMESPACE}
                     '''
                 }
             }
         }
 
-        stage('Verify & Monitor') {
+        stage('Verify Deployments & Services') {
             steps {
                 script {
-                    // Show running pods
-                    sh "kubectl get pods --namespace ${NAMESPACE}"
-                    sh "kubectl get pods --namespace monitoring"
+                    sh '''
+                        echo "App Pods in Default Namespace:"
+                        kubectl get pods -n ${NAMESPACE}
 
-                    // Port forward Grafana
-                    sh "kubectl port-forward svc/grafana 3000:80 --namespace monitoring &"
+                        echo "Monitoring Pods:"
+                        kubectl get pods -n ${MONITORING_NAMESPACE}
+
+                        echo "Monitoring Services:"
+                        kubectl get svc -n ${MONITORING_NAMESPACE}
+                    '''
+                }
+            }
+        }
+
+        stage('Expose Monitoring Dashboards') {
+            steps {
+                script {
+                    def grafanaSvc = sh(script: "kubectl get svc -n ${MONITORING_NAMESPACE} -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
+                    def prometheusSvc = sh(script: "kubectl get svc -n ${MONITORING_NAMESPACE} -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
+
+                    sh """
+                        nohup kubectl port-forward svc/${grafanaSvc} 3000:80 -n ${MONITORING_NAMESPACE} > grafana.log 2>&1 &
+                        nohup kubectl port-forward svc/${prometheusSvc} 9090:9090 -n ${MONITORING_NAMESPACE} > prometheus.log 2>&1 &
+                    """
                 }
             }
         }
     }
 
     post {
-        always { echo 'Pipeline finished.' }
-        success { echo 'Deployment successful.' }
-        failure { echo 'Pipeline failed. Check logs and pod status.' }
+        success {
+            echo "Deployment completed successfully."
+            echo "Grafana is available at http://localhost:3000"
+            echo "Prometheus is available at http://localhost:9090"
+        }
+        failure {
+            echo "Pipeline failed. Check logs and cluster status for troubleshooting."
+        }
+        always {
+            sh "pkill -f 'kubectl port-forward' || true"
+            echo "Cleaned up port-forward background processes."
+        }
     }
 }
