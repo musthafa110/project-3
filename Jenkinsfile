@@ -79,13 +79,11 @@ pipeline {
         stage('Expose Monitoring Dashboards') {
             steps {
                 script {
-                    def grafanaSvc = sh(script: "kubectl get svc -n ${MONITORING_NAMESPACE} -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
-                    def prometheusSvc = sh(script: "kubectl get svc -n ${MONITORING_NAMESPACE} -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}'", returnStdout: true).trim()
-
-                    sh """
-                        nohup kubectl port-forward svc/${grafanaSvc} 3000:80 -n ${MONITORING_NAMESPACE} > grafana.log 2>&1 &
-                        nohup kubectl port-forward svc/${prometheusSvc} 9090:9090 -n ${MONITORING_NAMESPACE} > prometheus.log 2>&1 &
-                    """
+                    sh '''
+                        # Port-forward standard service names installed via Helm
+                        nohup kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n ${MONITORING_NAMESPACE} > grafana.log 2>&1 &
+                        nohup kubectl port-forward svc/kube-prometheus-stack-prometheus 9090:9090 -n ${MONITORING_NAMESPACE} > prometheus.log 2>&1 &
+                    '''
                 }
             }
         }
