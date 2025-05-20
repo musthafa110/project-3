@@ -38,13 +38,21 @@ pipeline {
             }
         }
 
-        stage('Deploy & Rollout') {
+        stage('Deploy & Rollout Canary') {
             steps {
                 script {
-                    // Apply deployment and service
-                    sh "kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml --namespace ${NAMESPACE}"
-                    // Wait for deployment to be ready
-                    sh "kubectl rollout status deployment/nasa-app --namespace ${NAMESPACE}"
+                    // Apply both v1 and v2 canary deployments + service
+                    sh '''
+                        kubectl apply -f k8s/deployment-v1.yaml --namespace ${NAMESPACE}
+                        kubectl apply -f k8s/deployment-v2.yaml --namespace ${NAMESPACE}
+                        kubectl apply -f k8s/service.yaml --namespace ${NAMESPACE}
+                    '''
+
+                    // Wait for both deployments to become ready
+                    sh '''
+                        kubectl rollout status deployment/nasa-app-v1 --namespace ${NAMESPACE}
+                        kubectl rollout status deployment/nasa-app-v2 --namespace ${NAMESPACE}
+                    '''
                 }
             }
         }
@@ -52,11 +60,11 @@ pipeline {
         stage('Verify & Monitor') {
             steps {
                 script {
-                    // Verify pods in both default and monitoring namespaces
+                    // Show running pods
                     sh "kubectl get pods --namespace ${NAMESPACE}"
                     sh "kubectl get pods --namespace monitoring"
-                    
-                    // Port forward to access Grafana (runs in the background)
+
+                    // Port forward Grafana
                     sh "kubectl port-forward svc/grafana 3000:80 --namespace monitoring &"
                 }
             }
